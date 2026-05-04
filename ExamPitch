@@ -1,0 +1,40 @@
+Scene Validation & Export Tool for Blender to Unreal Engine
+
+When preparing assets inside Blender to then integrate to Unreal Engine we can often run
+into errors during the process, whether its making correct naming conventions, applying
+transformations and scale and many more little things, we end up wasting a lot of time
+getting everything prepared to then bring it to Unreal.
+
+This tool aims to solve all these issues for environment / tech artists by optimizing this
+process. Through a UI that takes you through scene validation to check all the possible
+little errors made along the way, to automatic cleanup where we have the option to
+quickly resolve these issues (ex. correcting naming conventions "object_01 ->
+SM_Object_01"), to exporting to unreal engine and automatically setting up the appropriate
+folder structures.
+
+Our tool will work as a Production Bridge between our Primary Software : Blender and our
+Secondary Software : Unreal Engine.
+
+The language for this tool will be Python using Blender's bpy API:
+• INPUT: Selected objects / Full scene in Blender
+• OUTPUT: Exported validated assets as .fbx organized in a structured folder system
+ready to be used in Unreal Engine
+
+Our Core Features will consist of:
+• Scene Validation : Detecting objects with un-applied transforms and scaling,
+identifying incorrect naming conventions, detecting duplicates / unused materials.
+Reset or keep current to default (scale:1/ rotation:0), location of pivot point
+can be controlled to keep at world center 0 or the current pivot.
+• Clean up System : Applying transforms and scaling, renaming objects based on
+preferred naming conventions, merging/removing duplicate materials.
+• Export System : Export selected objects or scene as an .fbx, automatically
+organizing the exported files into the appropriate folders, making sure the export
+settings are correct and compatible for Unreal Engine. Auto importer in Unreal,
+that also adds proper naming convention (SM_ prefix for example).
+
+The Modular Add-ons we could implement in the process of creating this tool or in the
+future could be:
+• Poly-count checker that warns when encountering high density meshes.
+• Automatic removal of unused materials.
+• Presets for different export settings to not only export for Unreal Engine.
+• Auto-generate materials for Unreal Engine.
