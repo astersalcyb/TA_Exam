@@ -73,30 +73,37 @@ class SceneChecker(bpy.types.Operator):
                 
         base_materials = {}
         
-            # DUPLICATES
+            # GROUPING MATERIALS
         
-        for mat in bpy.data.materials:
-            base = mat.name.split(".")[0]
+        for mat in bpy.data.materials: # loop through materials in my scene
+            base = mat.name.split(".")[0] # just the base name of the mat
 
-            if base not in base_materials:
+            if base not in base_materials: # if this mat doesn't have a list, create it
                 base_materials[base] = []
             
             base_materials[base].append(mat)
 
-        for base, mats in base_materials.items():
-            if len(mats) > 1:
-                for mat in mats:
-                    item = scene.material_check_items.add()
-                    item.name = mat.name
-                    item.issue = "Duplicate Material"
+            # PROCESS MATERIAL ISSUES
             
-            # UNUSED
-            
-        for mat in bpy.data.materials:
-            if mat.users == 0:
-                item = scene.material_check_items.add()
-                item.name = mat.name
-                item.issue = "Unused Material"
+            for base, mats in base_materials.items():
+                
+                # sort materials to have original as first one, we sort by name
+                mats_sorted = sorted(mats, key=lambda m: m.name)
+                
+                for i, mat in enumerate(mats_sorted): # enumerates and the first will be the original
+                    issues = []
+                    
+                    if i > 0: # i dont want the original (which is the first) so i skip it
+                        issues.append("Duplicate")
+                        
+                    if mat.users == 0: # by users it means if its used in any item in our scene
+                        issues.append("Unused")
+                        
+                    if issues: # only if material has issues add it to the list
+                        item = scene.material_check_items.add()
+                        item.name = mat.name
+                        item.issue = ",".join(issues) 
+
 
         self.report({'INFO'}, "Validation Complete")
                 
