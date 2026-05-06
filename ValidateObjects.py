@@ -9,13 +9,22 @@ bl_info = {
 
 import bpy
 
+# DATA LISTS:
 
-class ValidateItem(bpy.types.PropertyGroup):
+    # MESHES
+class ValidateMesh(bpy.types.PropertyGroup):
     # I want data storage to store results, I do this with Property Group which makes lists
+    # I will create "check_" to check items to validate if they are correct
     name : bpy.props.StringProperty()
     issue : bpy.props.StringProperty()
 
+    # MATERIALS
+class ValidateMaterial(bpy.types.PropertyGroup):
+    # Store material info in lists same as with the mesh info above
+    name: bpy.props.StringProperty()
+    issue: bpy.props.StringProperty()
 
+# WORKER CODE:
 
 class SceneChecker(bpy.types.Operator):
     # I want to create a custom operator for this tool
@@ -28,9 +37,12 @@ class SceneChecker(bpy.types.Operator):
         
         #simplify script for future use
         scene = context.scene
-        #clear out previous results in list (this "validation_items" can be found during the registration part of our script)
-        scene.check_items.clear()
         
+        #clear out previous results in list (this "_check_items" can be found during the registration part of our script)
+        scene.mesh_check_items.clear()
+        scene.material_check_items.clear()
+        
+        # MESHES
         
         for obj in scene.objects:
             if obj.type != 'MESH':
@@ -52,26 +64,63 @@ class SceneChecker(bpy.types.Operator):
                 issues.append("Naming Convention")
 
             if issues:
-                item = scene.check_items.add()
+                item = scene.mesh_check_items.add()
                 item.name = obj.name
                 item.issue = "Unapplied: " + ",".join(issues)
                 # We combine everything into one string to simplify and make more readable
+               
+        # MATERIALS               
+                
+        base_materials = {}
+        
+            # DUPLICATES
+        
+        for mat in bpy.data.materials:
+            base = mat.name.split(".")[0]
 
+            if base not in base_materials:
+                base_materials[base] = []
+            
+            base_materials[base].append(mat)
+
+        for base, mats in base_materials.items():
+            if len(mats) > 1:
+                for mat in mats:
+                    item = scene.material_check_items.add()
+                    item.name = mat.name
+                    item.issue = "Duplicate Material"
+            
+            # UNUSED
+            
+        for mat in bpy.data.materials:
+            if mat.users == 0:
+                item = scene.material_check_items.add()
+                item.name = mat.name
+                item.issue = "Unused Material"
 
         self.report({'INFO'}, "Validation Complete")
                 
             
         return {'FINISHED'}
         
+# UI 
         
-class UI_SceneValidation(bpy.types.UIList):
+class UI_MeshValidation(bpy.types.UIList):
     # Create a UI list to be able to visualize the data easier
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         row = layout.row()
         row.label(text=item.name, icon='OBJECT_DATA')
         row.label(text=item.issue)
         
-    
+        
+class UI_MaterialValidation(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        row = layout.row()
+        row.label(text=item.name, icon='MATERIAL')
+        row.label(text=item.issue)               
+        
+# DISPLAY
+        
 class Display_ValidateScene(bpy.types.Panel):
     # We prepare our panel where our tool will be displayed
     bl_label = "Scene Validation"
@@ -90,24 +139,43 @@ class Display_ValidateScene(bpy.types.Panel):
         
         layout.operator("scene.check_scene")
         
+        # MESH ISSUES
+        
         # Draw my UI list using the items in my validation list
+        layout.label(text="Mesh Issues", icon='OBJECT_DATA')
         layout.template_list(
-        "UI_SceneValidation",
+        "UI_MeshValidation",
         "", # empty for now because i dont have multiple lists
         scene,
-        "check_items", # items in my validation list
+        "mesh_check_items", # items in my validation list
         scene,
-        "check_index" # index of items in my validation list
+        "mesh_check_index" # index of items in my validation list
+        )
+    
+        # MATERIAL ISSUES
+        
+        layout.label(text="Material Issues", icon='MATERIAL')
+        layout.template_list(
+            "UI_MaterialValidation",
+            "",
+            scene,
+            "material_check_items",
+            scene,
+            "material_check_index"
         )
 
+
+# REGISTER/UNREGISTER
 
 # For each class we make and want to run, we must register and unregister them in this format
 # We simplify this process by making a list of our classes and looping through it
 
 classes = (
-    ValidateItem,
+    ValidateMesh,
+    ValidateMaterial,
     SceneChecker,
-    UI_SceneValidation,
+    UI_MeshValidation,
+    UI_MaterialValidation,
     Display_ValidateScene
 )
 
@@ -116,13 +184,19 @@ def register():
     for cls in classes : 
         bpy.utils.register_class(cls)
         
-    bpy.types.Scene.check_items = bpy.props.CollectionProperty(type=ValidateItem)
-    bpy.types.Scene.check_index = bpy.props.IntProperty()
+    bpy.types.Scene.mesh_check_items = bpy.props.CollectionProperty(type=ValidateMesh)
+    bpy.types.Scene.mesh_check_index = bpy.props.IntProperty()
+    
+    bpy.types.Scene.material_check_items = bpy.props.CollectionProperty(type=ValidateMaterial)
+    bpy.types.Scene.material_check_index = bpy.props.IntProperty()
 
 
 def unregister():
-    del bpy.types.Scene.check_items
-    del bpy.types.Scene.check_index
+    del bpy.types.Scene.mesh_check_items
+    del bpy.types.Scene.mesh_check_index
+    
+    del bpy.types.Scene.material_check_items
+    del bpy.types.Scene.material_check_index
 
     
     for cls in reversed(classes):
