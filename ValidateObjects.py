@@ -17,12 +17,112 @@ class ValidateMesh(bpy.types.PropertyGroup):
     # I will create "check_" to check items to validate if they are correct
     name : bpy.props.StringProperty()
     issue : bpy.props.StringProperty()
+    # i want to make a check box for selected items in my ui list
+    selected: bpy.props.BoolProperty()
 
     # MATERIALS
 class ValidateMaterial(bpy.types.PropertyGroup):
     # Store material info in lists same as with the mesh info above
     name: bpy.props.StringProperty()
     issue: bpy.props.StringProperty()
+
+
+# MESH SELECTION IN UI AND VIEWPORT
+
+def update_mesh_selection(self, context):       
+        # i want to make a funtion to select the mesh with issues in my ui and also in my viewport       
+        scene = context.scene
+
+        if not scene.mesh_check_items: # make sure my list isnt empty
+            return
+
+        index = scene.mesh_check_index # get my row index
+
+        if index >= len(scene.mesh_check_items): # make sure index is in range of the items list index amount
+            return
+
+        item = scene.mesh_check_items[index] # get the selected mesh from my list
+
+        obj = scene.objects.get(item.name) # find the mesh inside my scene now
+
+        if obj:
+            bpy.ops.object.select_all(action='DESELECT')
+
+            obj.select_set(True) # select my mesh
+
+            context.view_layer.objects.active = obj # make the selected mesh active in my viewport
+            
+# SELECTION/DESELECTION FOR UI
+            
+class SelectMeshes(bpy.types.Operator):
+
+    bl_idname = "scene.select_meshes"
+
+    bl_label = "Show Selected"
+
+    def execute(self, context):
+
+        scene = context.scene
+
+        bpy.ops.object.select_all(action='DESELECT') # Make sure selection starts empty
+
+        selected_objects = [] # list of selected meshes
+
+        for item in scene.mesh_check_items: # in our list of meshes with issues
+
+            if item.selected:
+
+                obj = scene.objects.get(item.name) # get name of selected mesh
+
+                if obj:
+                    obj.select_set(True) # if selected mesh exists, selection set to true
+
+                    selected_objects.append(obj) # add to selected meshes list
+
+        # Make first selected object active
+        if selected_objects:
+            context.view_layer.objects.active = selected_objects[0]
+
+        return {'FINISHED'}
+
+class DeselectMeshes(bpy.types.Operator):
+    # same as select meshes but to deselect them all in case theres a large amount of meshes with issues
+    bl_idname = "scene.deselect_meshes"
+
+    bl_label = "Deselect All"
+
+    def execute(self, context):
+
+        scene = context.scene
+
+        # Remove check from all UI checkboxes
+        for item in scene.mesh_check_items:
+            item.selected = False # mesh selection is now false
+
+        # Deselect objects in viewport
+        bpy.ops.object.select_all(action='DESELECT')
+
+        return {'FINISHED'}
+
+class SelectAllMeshes(bpy.types.Operator):
+    # finally this option to be able to select all meshes with issues from my ui list
+    bl_idname = "scene.select_all_meshes"
+
+    bl_label = "Select All"
+
+    def execute(self, context):
+
+        scene = context.scene
+
+        # Add check to all UI checkboxes
+        for item in scene.mesh_check_items:
+            item.selected = True # mesh selection is now true for all
+
+        # Select all objects in viewport
+        bpy.ops.object.select_all(action='SELECT')
+
+        return {'FINISHED'}
+
 
 # WORKER CODE:
 
@@ -62,6 +162,12 @@ class SceneChecker(bpy.types.Operator):
             # Check naming
             if not obj.name.startswith("SM_"):
                 issues.append("Naming Convention")
+                
+            # Check pivot pt location
+            if obj.location.length != 0: # if length of my obj pivot location to origin is not 0, issue!
+                pivot = obj.matrix_world.translation # detect where pivot pt is
+                pivot_location = (round(pivot.x, 2), round(pivot.y, 2), round(pivot.z, 2)) # get the location but round the results
+                issues.append(f"Pivot != Origin | Aprox location {pivot_location}") # pivot issue with aprox location of it
 
             if issues:
                 item = scene.mesh_check_items.add()
@@ -116,15 +222,16 @@ class UI_MeshValidation(bpy.types.UIList):
     # Create a UI list to be able to visualize the data easier
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         row = layout.row()
-        row.label(text=item.name, icon='OBJECT_DATA')
-        row.label(text=item.issue)
-        
+        row.prop(item, "selected", text="") # show check box for selected item
+        row.label(text=item.name)
+        row.label(text=item.issue)         
         
 class UI_MaterialValidation(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         row = layout.row()
         row.label(text=item.name, icon='MATERIAL')
-        row.label(text=item.issue)               
+        row.label(text=item.issue)
+              
         
 # DISPLAY
         
@@ -158,6 +265,11 @@ class Display_ValidateScene(bpy.types.Panel):
         scene,
         "mesh_check_index" # index of items in my validation list
         )
+        
+        row = layout.row()
+        row.operator("scene.select_all_meshes") # display in ui select all button for ui and viewport
+        row.operator("scene.select_meshes") # display in ui select in viewport button
+        row.operator("scene.deselect_meshes") # display in ui deselect button for ui and viewport      
     
         # MATERIAL ISSUES
         
@@ -174,12 +286,15 @@ class Display_ValidateScene(bpy.types.Panel):
 
 # REGISTER/UNREGISTER
 
-# For each class we make and want to run, we must register and unregister them in this format
-# We simplify this process by making a list of our classes and looping through it
+    # For each class we make and want to run, we must register and unregister them in this format
+    # We simplify this process by making a list of our classes and looping through it
 
 classes = (
     ValidateMesh,
     ValidateMaterial,
+    SelectMeshes,
+    DeselectMeshes,
+    SelectAllMeshes,
     SceneChecker,
     UI_MeshValidation,
     UI_MaterialValidation,
@@ -192,7 +307,7 @@ def register():
         bpy.utils.register_class(cls)
         
     bpy.types.Scene.mesh_check_items = bpy.props.CollectionProperty(type=ValidateMesh)
-    bpy.types.Scene.mesh_check_index = bpy.props.IntProperty()
+    bpy.types.Scene.mesh_check_index = bpy.props.IntProperty(update=update_mesh_selection) # this allows for selecting multiple meshes in my ui list
     
     bpy.types.Scene.material_check_items = bpy.props.CollectionProperty(type=ValidateMaterial)
     bpy.types.Scene.material_check_index = bpy.props.IntProperty()
