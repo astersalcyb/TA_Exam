@@ -25,6 +25,23 @@ class ValidateMaterial(bpy.types.PropertyGroup):
     # Store material info in lists same as with the mesh info above
     name: bpy.props.StringProperty()
     issue: bpy.props.StringProperty()
+    
+    
+# IDs FOR FUTURE PROBLEM SOLVING
+
+ISSUE_LABELS = {
+    # we want to have these IDs to identify our issues easier when it comes to the second part of our tool, the fixer.
+
+    # MESHES
+    "SCALE_NOT_APPLIED": "Scale",
+    "ROTATION_NOT_APPLIED": "Rotation",
+    "WRONG_NAMING_CONVENTION": "Naming Convention",
+    "PIVOT_NOT_ORIGIN": "Pivot != Origin",
+
+    # MATERIALS
+    "DUPLICATE_MATERIAL": "Duplicate",
+    "UNUSED_MATERIAL": "Unused",
+}
 
 
 # MESH SELECTION IN UI AND VIEWPORT
@@ -123,7 +140,6 @@ class SelectAllMeshes(bpy.types.Operator):
 
         return {'FINISHED'}
 
-
 # WORKER CODE:
 
 class SceneChecker(bpy.types.Operator):
@@ -153,26 +169,26 @@ class SceneChecker(bpy.types.Operator):
             
             # Check scale
             if obj.scale != (1,1,1):
-                issues.append("Scale")
+                issues.append("SCALE_NOT_APPLIED")
 
             # Check rotation
             if obj.rotation_euler != (0, 0, 0):
-                issues.append("Rotation")
+                issues.append("ROTATION_NOT_APPLIED")
 
             # Check naming
             if not obj.name.startswith("SM_"):
-                issues.append("Naming Convention")
+                issues.append("WRONG_NAMING_CONVENTION")
                 
             # Check pivot pt location
             if obj.location.length != 0: # if length of my obj pivot location to origin is not 0, issue!
                 pivot = obj.matrix_world.translation # detect where pivot pt is
-                pivot_location = (round(pivot.x, 2), round(pivot.y, 2), round(pivot.z, 2)) # get the location but round the results
-                issues.append(f"Pivot != Origin | Aprox location {pivot_location}") # pivot issue with aprox location of it
+                pivot_location = (pivot.x,pivot.y,pivot.z) # store pivot pt location, i might want to use this later
+                issues.append(f"PIVOT_NOT_ORIGIN") # pivot issue
 
             if issues:
                 item = scene.mesh_check_items.add()
                 item.name = obj.name
-                item.issue = "Unapplied: " + ",".join(issues)
+                item.issue = ",".join(issues)
                 # We combine everything into one string to simplify and make more readable
                
         # MATERIALS               
@@ -200,10 +216,10 @@ class SceneChecker(bpy.types.Operator):
                     issues = []
                     
                     if i > 0: # i dont want the original (which is the first) so i skip it
-                        issues.append("Duplicate")
+                        issues.append("DUPLICATE_MATERIAL")
                         
                     if mat.users == 0: # by users it means if its used in any item in our scene
-                        issues.append("Unused")
+                        issues.append("UNUSED_MATERIAL")
                         
                     if issues: # only if material has issues add it to the list
                         item = scene.material_check_items.add()
@@ -224,13 +240,19 @@ class UI_MeshValidation(bpy.types.UIList):
         row = layout.row()
         row.prop(item, "selected", text="") # show check box for selected item
         row.label(text=item.name)
-        row.label(text=item.issue)         
+        
+        issue_ids = item.issue.split(",") # now while our issues have they're own IDs which will be easy to spot for the fixer code, in our UI they will still show in a simpler way like just "scale"
+        labels = [ISSUE_LABELS.get(i, i) for i in issue_ids] # loop through issues and they're value for the ui display of it
+        row.label(text=", ".join(labels)) # stack our issues in string for display         
         
 class UI_MaterialValidation(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         row = layout.row()
         row.label(text=item.name, icon='MATERIAL')
-        row.label(text=item.issue)
+        
+        issue_ids = item.issue.split(",")
+        labels = [ISSUE_LABELS.get(i, i) for i in issue_ids]
+        row.label(text=", ".join(labels))
               
         
 # DISPLAY
@@ -283,7 +305,6 @@ class Display_ValidateScene(bpy.types.Panel):
             "material_check_index"
         )
 
-
 # REGISTER/UNREGISTER
 
     # For each class we make and want to run, we must register and unregister them in this format
@@ -320,13 +341,8 @@ def unregister():
     del bpy.types.Scene.material_check_items
     del bpy.types.Scene.material_check_index
 
-    
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-        
-
 
 if __name__ == "__main__":
     register()
-    
-    
