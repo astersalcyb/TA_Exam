@@ -2,6 +2,7 @@ import bpy
 import re # library for name splitting by it's components (ex. prefix, name, suffix...)
 from . import validation
 from .validation import Fix_Options # import my data container for my "fix custom"
+from mathutils import Vector # for calculating pivot at bottom of mesh
 
 # FIX FUNCTIONS
 def fix_transforms(obj, context, location=False, rotation=False, scale=False): # function to fix transforms (scale,location,rotation)
@@ -15,44 +16,81 @@ def fix_transforms(obj, context, location=False, rotation=False, scale=False): #
     bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale) # apply transformations
     return True
 
+def get_required_prefix(context):
+
+    options = context.scene.fix_options
+
+    if options.naming_mode == 'UE':
+        return "SM_"
+
+    elif options.naming_mode == 'UNITY':
+        return "M_"
+
+    elif options.naming_mode == 'CUSTOM':
+        return options.naming_prefix
+
+    return ""
+
 def fix_naming(obj, context):
-    
-    if obj.type != 'MESH':
-        return False
-    
+
+    prefix = get_required_prefix(context)
+
+    if prefix == "":
+        return
+
     name = obj.name # get mesh name
 
-    # detect mesh suffixes by components (name, number)
-    match = re.match(r"(.+)\.(\d+)$", name)
+    # remove old prefix (simple safe split)
+    if "_" in name:
+        name = name.split("_", 1)[1]
 
-    if match:
-        base = match.group(1) # base name
-        num = match.group(2) # mesh number (in case of multiple)
-        obj.name = f"SM_{base}_{num}"
-    else:
-        obj.name = f"SM_{name}" # if no number, just keep as SM_name
-
-    return True
+    obj.name = prefix + name
 
 def fix_pivot(obj, context):
-
     # ensure correct context
+    mode = context.scene.fix_options.pivot_mode
+
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
     context.view_layer.objects.active = obj
-
     # store current 3D cursor position
     cursor_backup = context.scene.cursor.location.copy()
-
+    # pivot depending on option chosen in UI
     try:
-        # move cursor to origin
-        context.scene.cursor.location = (0, 0, 0)
+        if mode == 'ORIGIN':
 
-        # set origin
-        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            context.scene.cursor.location = (0, 0, 0)
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+
+        elif mode == 'CENTER':
+
+            bpy.ops.object.origin_set(
+                type='ORIGIN_GEOMETRY',
+                center='BOUNDS'
+            )
+
+        elif mode == 'BOTTOM':
+
+            # calculate bottom center of bounding box
+            world_corners = [
+                obj.matrix_world @ Vector(corner)
+                for corner in obj.bound_box
+            ]
+
+            min_z = min(v.z for v in world_corners)
+
+            center_x = sum(v.x for v in world_corners) / 8
+            center_y = sum(v.y for v in world_corners) / 8
+
+            context.scene.cursor.location = (
+                center_x,
+                center_y,
+                min_z
+            )
+
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
     finally:
-        # ALWAYS restore cursor (even if operator fails)
         context.scene.cursor.location = cursor_backup
 
     return True
@@ -69,7 +107,7 @@ FIXERS = {
         lambda obj, ctx: fix_transforms(obj, ctx, location=True),
 
     "WRONG_NAMING_CONVENTION": fix_naming,
-    "PIVOT_NOT_ORIGIN": fix_pivot,
+    "PIVOT_INVALID": fix_pivot,
 }
 
 # MAIN FIX FUNCTION 
@@ -142,7 +180,7 @@ class Fix_Custom(bpy.types.Operator):
         if opts.fix_naming:
             allowed.update({"WRONG_NAMING_CONVENTION"})
         if opts.fix_pivot:
-            allowed.update({"PIVOT_NOT_ORIGIN"})
+            allowed.update({"PIVOT_INVALID"})
 
         if not allowed: # if nothing is checked then cancell the operation
             self.report({'WARNING'}, "No fix options selected")

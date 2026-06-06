@@ -7,7 +7,33 @@ class Fix_Options(bpy.types.PropertyGroup): # container of custom fixing options
     fix_rotation: bpy.props.BoolProperty(name="Rotation", default=True)
     fix_location: bpy.props.BoolProperty(name="Location", default=True)
     fix_naming: bpy.props.BoolProperty(name="Naming Convention", default=True)
+    
+    naming_mode: bpy.props.EnumProperty(
+        name="Naming Standard",
+        items=[
+            ('UE', "Unreal Engine", ""),
+            ('UNITY', "Unity", ""),
+            ('CUSTOM', "Custom", "")
+        ],
+        default='UE'
+    )
+    
+    naming_prefix: bpy.props.StringProperty(
+        name="Custom Prefix",
+        default="SM_"
+    )
+    
     fix_pivot: bpy.props.BoolProperty(name="Pivot", default=True)
+    
+    pivot_mode: bpy.props.EnumProperty( # pivot point options
+        name="Pivot Position",
+        items=[
+            ('ORIGIN', "World Origin", ""),
+            ('CENTER', "Object Center", ""),
+            ('BOTTOM', "Bottom Of Mesh", ""),
+        ],
+        default='ORIGIN'
+        )
 
 
 ISSUE_LABELS = {  # we want to have these IDs to identify our issues easier when it comes to the second part of our tool, the fixer.
@@ -15,8 +41,8 @@ ISSUE_LABELS = {  # we want to have these IDs to identify our issues easier when
     "SCALE_NOT_APPLIED": "Scale",
     "ROTATION_NOT_APPLIED": "Rotation",
     "LOCATION_NOT_APPLIED": "Location",
-    "WRONG_NAMING_CONVENTION": "Naming Convention",
-    "PIVOT_NOT_ORIGIN": "Pivot != Origin",
+    "WRONG_NAMING_CONVENTION": "Naming Convention != Standard",
+    "PIVOT_INVALID": "Pivot Invalid",
     # MATERIALS
     "DUPLICATE_MATERIAL": "Duplicate",
     "UNUSED_MATERIAL": "Unused",
@@ -116,10 +142,10 @@ class SceneChecker(bpy.types.Operator):
                 issues.append("WRONG_NAMING_CONVENTION")
 
             # --- PIVOT CHECK ---
-            if obj.location.length != 0:
+            if obj.location.length != 0: # If pivot not at origin
                 pivot = obj.matrix_world.translation # world space position
                 pivot_location = (pivot.x, pivot.y, pivot.z)  # kept for future use
-                issues.append("PIVOT_NOT_ORIGIN")
+                issues.append("PIVOT_INVALID")
 
             # store results
             if issues:
@@ -166,6 +192,30 @@ class SceneChecker(bpy.types.Operator):
 
         return {'FINISHED'}
 
+# FUNCTION FOR NAMING CONVENTIONS
+def get_required_prefix(context):
+
+    options = context.scene.fix_options
+    # different naming mode and what prefix it gives
+    if options.naming_mode == 'UE':
+        return "SM_"
+
+    elif options.naming_mode == 'UNITY':
+        return "M_"
+
+    elif options.naming_mode == 'CUSTOM':
+        return options.naming_prefix # chose what naming prefix i want
+
+    return ""
+
+def validate_naming(obj, context):
+
+    prefix = get_required_prefix(context)
+
+    if prefix == "":
+        return True
+
+    return obj.name.startswith(prefix)
 
 # REGISTER/UNREGISTER
 

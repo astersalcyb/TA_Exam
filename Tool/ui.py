@@ -122,7 +122,14 @@ class Display_ValidateScene(bpy.types.Panel):
         box.prop(context.scene.fix_options, "fix_rotation")
         box.prop(context.scene.fix_options, "fix_location")
         box.prop(context.scene.fix_options, "fix_naming")
+        if context.scene.fix_options.fix_naming:
+            box.prop(context.scene.fix_options, "naming_mode") # show naming options
+            if context.scene.fix_options.naming_mode == 'CUSTOM': # if i want custom naming prefix
+                box.prop(context.scene.fix_options, "naming_prefix") # type what i want
+        
         box.prop(context.scene.fix_options, "fix_pivot")
+        if context.scene.fix_options.fix_pivot:
+            box.prop(context.scene.fix_options, "pivot_mode") # display pivot pt options if fix pivot checked
 
 # LIST OF ALL CLASSES USED IN FILE
 classes = (
