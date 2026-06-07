@@ -184,6 +184,22 @@ class Display_ValidateScene(bpy.types.Panel):
                 box.prop(scene.fix_mat_options, "mat_naming_prefix")
         box.prop(scene.fix_mat_options, "fix_duplicate")
         box.prop(scene.fix_mat_options, "fix_unused")
+        
+        # EXPORT TOOL
+        opts   = context.scene.export_options
+        layout.prop(opts, "export_path") # export path picker, the folder icon button next to this field opens a system folder browser
+
+        # engine and mode selectors side by side
+        row = layout.row(align=True)
+        row.prop(opts, "engine",      expand=True)  # expand=True shows buttons instead of a dropdown
+
+        layout.prop(opts, "export_mode")
+        layout.prop(opts, "export_individual")
+        layout.prop(opts, "validate_before_export")
+
+        layout.separator()
+        # export button
+        layout.operator("scene.export_scene", icon='EXPORT')
 
 # LIST OF ALL CLASSES USED IN FILE
 classes = (
