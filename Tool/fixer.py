@@ -7,7 +7,6 @@ from mathutils import Vector # for calculating pivot at bottom of mesh
 # MESH FIX FUNCTIONS
 
 def fix_transforms(obj, context, location=False, rotation=False, scale=False): # function to fix transforms (scale,location,rotation)
-    
     if obj.type != 'MESH':
         return False
     
@@ -18,33 +17,26 @@ def fix_transforms(obj, context, location=False, rotation=False, scale=False): #
     return True
 
 def get_required_prefix(context):
-
     options = context.scene.fix_options
 
     if options.naming_mode == 'UE':
         return "SM_"
-
     elif options.naming_mode == 'UNITY':
         return "M_"
-
     elif options.naming_mode == 'CUSTOM':
         return options.naming_prefix
-
     return ""
 
 def fix_naming(obj, context):
-
     prefix = get_required_prefix(context)
 
     if prefix == "":
         return
 
     name = obj.name # get mesh name
-
     # remove old prefix (simple safe split)
     if "_" in name:
         name = name.split("_", 1)[1]
-
     obj.name = prefix + name
 
 def fix_pivot(obj, context):
@@ -59,27 +51,22 @@ def fix_pivot(obj, context):
     # pivot depending on option chosen in UI
     try:
         if mode == 'ORIGIN':
-
             context.scene.cursor.location = (0, 0, 0)
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
         elif mode == 'CENTER':
-
             bpy.ops.object.origin_set(
                 type='ORIGIN_GEOMETRY',
                 center='BOUNDS'
             )
 
-        elif mode == 'BOTTOM':
-
-            # calculate bottom center of bounding box
+        elif mode == 'BOTTOM': # calculate bottom center of bounding box
             world_corners = [
                 obj.matrix_world @ Vector(corner)
                 for corner in obj.bound_box
             ]
 
             min_z = min(v.z for v in world_corners)
-
             center_x = sum(v.x for v in world_corners) / 8
             center_y = sum(v.y for v in world_corners) / 8
 
@@ -88,37 +75,29 @@ def fix_pivot(obj, context):
                 center_y,
                 min_z
             )
-
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-
     finally:
         context.scene.cursor.location = cursor_backup
-
     return True
 
 # IDS FOR ISSUES TO FIX PER MESH, TO CONNECT WITH CORRESPONDING FIX FUNCTION
 FIXERS = {
     "SCALE_NOT_APPLIED":
         lambda obj, ctx: fix_transforms(obj, ctx, scale=True),
-
     "ROTATION_NOT_APPLIED":
         lambda obj, ctx: fix_transforms(obj, ctx, rotation=True),
-
     "LOCATION_NOT_APPLIED":
         lambda obj, ctx: fix_transforms(obj, ctx, location=True),
-
     "WRONG_NAMING_CONVENTION": fix_naming,
     "PIVOT_INVALID": fix_pivot,
 }
 
 # MATERIAL FIX FUNCTIONS
 
-def fix_no_material(mat_item_name, context):
-    """Assign a new default material to a mesh that has none."""
+def fix_no_material(mat_item_name, context): # assign a new default material to a mesh that has none
     obj = context.scene.objects.get(mat_item_name)
     if obj is None or obj.type != 'MESH':
         return False
-
     # build a sensible default material name from the mesh name
     prefix = validation.get_required_mat_prefix(context)
     # strip any existing mesh prefix and use the core name
@@ -126,7 +105,6 @@ def fix_no_material(mat_item_name, context):
     if "_" in base:
         base = base.split("_", 1)[1]
     mat_name = prefix + base if prefix else "M_" + base
-
     # reuse existing material with that name or create a fresh one
     mat = bpy.data.materials.get(mat_name) or bpy.data.materials.new(name=mat_name)
 
@@ -137,9 +115,7 @@ def fix_no_material(mat_item_name, context):
 
     return True
 
-
-def fix_material_naming(mat_name, context):
-    # rename a material to match the chosen naming convention
+def fix_material_naming(mat_name, context): # rename a material to match the chosen naming convention
     mat = bpy.data.materials.get(mat_name)
     if mat is None:
         return False
@@ -150,19 +126,15 @@ def fix_material_naming(mat_name, context):
 
     if mat.name.startswith(prefix):
         return True  # already correct
-
     # strip any existing prefix up to the first underscore
     name = mat.name
     if "_" in name:
         name = name.split("_", 1)[1]
-
     # avoid name collisions by letting blender deduplicate
     mat.name = prefix + name
     return True
 
-
-def fix_duplicate_material(mat_name, context):
-    # remap all users of a duplicate material to the original and delete the duplicate
+def fix_duplicate_material(mat_name, context): # remap all users of a duplicate material to the original and delete the duplicate
     mat = bpy.data.materials.get(mat_name)
     if mat is None:
         return False
@@ -177,9 +149,7 @@ def fix_duplicate_material(mat_name, context):
     bpy.data.materials.remove(mat)
     return True
 
-
-def fix_unused_material(mat_name, context):
-    # remove a material that has no users
+def fix_unused_material(mat_name, context): # remove a material that has no users
     mat = bpy.data.materials.get(mat_name)
     if mat is None:
         return False
@@ -190,9 +160,7 @@ def fix_unused_material(mat_name, context):
 
     return False
 
-
-# map issue IDs to their material fix functions
-# each function receives (item.name, context)
+# map issue IDs to their material fix functions / each function receives (item.name, context)
 MATERIAL_FIXERS = {
     "NO_MATERIAL_ASSIGNED": fix_no_material,
     "WRONG_MATERIAL_NAMING": fix_material_naming,
@@ -202,8 +170,7 @@ MATERIAL_FIXERS = {
 
 # MAIN FIX FUNCTIONS
 
-def run_fixes(context, selected_only=False, allowed_issues=None):
-    # loop though checked meshes
+def run_fixes(context, selected_only=False, allowed_issues=None): # loop though checked meshes
     for item in context.scene.mesh_check_items:
         if selected_only and not item.selected: # if mesh is selected
             continue
@@ -230,7 +197,6 @@ def run_fixes(context, selected_only=False, allowed_issues=None):
 
         item.issue = ", ".join(remaining_issues) # update issue list
 
-
 def run_material_fixes(context, selected_only=False, allowed_issues=None):
     # loop through material_check_items and apply the relevant fix functions
     # we iterate over a snapshot of names because fixing (e.g. removing a duplicate) can modify bpy.data.materials while we are reading it
@@ -239,13 +205,11 @@ def run_material_fixes(context, selected_only=False, allowed_issues=None):
     for name, issue_str, selected in items_snapshot:
         if selected_only and not selected:
             continue
-
         issues = [i.strip() for i in issue_str.split(",") if i.strip()]
 
         for issue in issues:
             if allowed_issues is not None and issue not in allowed_issues:
                 continue
-
             fixer = MATERIAL_FIXERS.get(issue)
             if fixer:
                 fixer(name, context)
@@ -321,7 +285,6 @@ class Fix_All_Materials(bpy.types.Operator):
         bpy.ops.scene.check_scene()
         return {'FINISHED'}
 
-
 class Fix_Custom_Materials(bpy.types.Operator):
     bl_idname = "scene.fix_custom_materials"
     bl_label = "Fix Custom"
@@ -350,7 +313,6 @@ class Fix_Custom_Materials(bpy.types.Operator):
         run_material_fixes(context, selected_only=True, allowed_issues=allowed)
         bpy.ops.scene.check_scene()
         return {'FINISHED'}
-
 
 # CLASSES LIST
 classes = (

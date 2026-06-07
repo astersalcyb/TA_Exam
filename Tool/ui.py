@@ -19,7 +19,6 @@ class SelectMeshes(bpy.types.Operator): # read values in my issue mesh list and 
                 obj = scene.objects.get(item.name) # get mesh name
                 if obj: # if mesh exists
                     obj.select_set(True) # set mesh as true (selected)
-
         return {'FINISHED'}
 
 class DeselectMeshes(bpy.types.Operator): # deselection button for all meshes in list
@@ -109,7 +108,6 @@ class Display_ValidateScene(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-
         # scan button
         layout.operator("scene.check_scene")
 
@@ -123,7 +121,7 @@ class Display_ValidateScene(bpy.types.Panel):
             scene,
             "mesh_check_index"
         )
-        # Select / Deselect buttons
+        # SELECT/DESELECT BUTTONS
         row = layout.row(align=True)
         row.operator("scene.select_all_meshes")
         row.operator("scene.deselect_meshes")
@@ -163,7 +161,7 @@ class Display_ValidateScene(bpy.types.Panel):
             scene,
             "material_check_index"
         )
-        # Select / Deselect buttons (mirrors the mesh section)
+        # SELECT/DESELECT BUTTONS (mirrors the mesh section)
         row = layout.row(align=True)
         row.operator("scene.select_all_materials")
         row.operator("scene.deselect_materials")
@@ -186,7 +184,6 @@ class Display_ValidateScene(bpy.types.Panel):
                 box.prop(scene.fix_mat_options, "mat_naming_prefix")
         box.prop(scene.fix_mat_options, "fix_duplicate")
         box.prop(scene.fix_mat_options, "fix_unused")
-
 
 # LIST OF ALL CLASSES USED IN FILE
 classes = (
