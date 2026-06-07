@@ -186,19 +186,17 @@ class Display_ValidateScene(bpy.types.Panel):
         box.prop(scene.fix_mat_options, "fix_unused")
         
         # EXPORT TOOL
-        opts   = context.scene.export_options
-        layout.prop(opts, "export_path") # export path picker, the folder icon button next to this field opens a system folder browser
-
-        # engine and mode selectors side by side
-        row = layout.row(align=True)
-        row.prop(opts, "engine",      expand=True)  # expand=True shows buttons instead of a dropdown
-
-        layout.prop(opts, "export_mode")
-        layout.prop(opts, "export_individual")
-        layout.prop(opts, "validate_before_export")
-
         layout.separator()
-        # export button
+        
+        layout.label(text="Exporter", icon='EXPORT')
+        opts = context.scene.export_options
+        # here i can click where i want my fbx to be exported to in my file explorer
+        layout.prop(opts, "export_path")
+        row = layout.row(align=True)
+        
+        row.prop(opts, "engine", expand=True)
+        layout.prop(opts, "export_mode")
+        layout.separator()
         layout.operator("scene.export_scene", icon='EXPORT')
 
 # LIST OF ALL CLASSES USED IN FILE
