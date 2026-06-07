@@ -4,7 +4,8 @@ from .validation import ISSUE_LABELS
 from . import fixer
 from .fixer import FIXERS
 
-# SELECTION CLASSES
+# MESH SELECTION OPERATORS
+
 class SelectMeshes(bpy.types.Operator): # read values in my issue mesh list and select only checked ones in ui
     bl_idname = "scene.select_meshes"
     bl_label = "Selected Meshes"
@@ -47,7 +48,27 @@ class SelectAllMeshes(bpy.types.Operator): # selection button for all meshes in 
         bpy.ops.object.select_all(action='SELECT') # mark all objs in scene as selected
         return {'FINISHED'}
 
-# VALIDATION CLASSES FOR UI
+# MATERIAL SELECTION OPERATORS
+
+class SelectAllMaterials(bpy.types.Operator):
+    bl_idname = "scene.select_all_materials"
+    bl_label = "Select All"
+
+    def execute(self, context):
+        for item in context.scene.material_check_items:
+            item.selected = True
+        return {'FINISHED'}
+    
+class DeselectMaterials(bpy.types.Operator):
+    bl_idname = "scene.deselect_materials"
+    bl_label = "Deselect All"
+
+    def execute(self, context):
+        for item in context.scene.material_check_items:
+            item.selected = False
+        return {'FINISHED'}
+
+# UI LISTS
 
 class UI_MeshValidation(bpy.types.UIList): # create custom ui list
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname): # draw methods
@@ -56,20 +77,27 @@ class UI_MeshValidation(bpy.types.UIList): # create custom ui list
         row.label(text=item.name) # issue mesh's name as string text
 
         issue_ids = item.issue.split(",") if item.issue else [] # make list of issues of mesh
-        labels = [ISSUE_LABELS.get(i, i) for i in issue_ids] # convert issue id's to labels
+        labels = [ISSUE_LABELS.get(i.strip(), i.strip()) for i in issue_ids] # convert issue id's to labels
         row.label(text=", ".join(labels)) # issue text from labels
 
 
 class UI_MaterialValidation(bpy.types.UIList): # create custom ui list
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname): # draw methods
-        row = layout.row(align=True) # horizontal row layout (with alignment to look better)
-        row.label(text=item.name, icon='MATERIAL') # material name with icon 
+        row = layout.row(align=True)
+        row.prop(item, "selected", text="")
 
-        issue_ids = item.issue.split(",") if item.issue else []  # make list of issues of material
-        labels = [ISSUE_LABELS.get(i, i) for i in issue_ids] # convert issue id's to labels
-        row.label(text=", ".join(labels))  # issue text from labels
+        # for icons, meshes that have no material use OBJECT_DATA, materials use MATERIAL
+        issue_ids = [i.strip() for i in item.issue.split(",") if i.strip()]
+        if issue_ids == ["NO_MATERIAL_ASSIGNED"]:
+            row.label(text=item.name, icon='OBJECT_DATA')  # item.name is the mesh name here
+        else:
+            row.label(text=item.name, icon='MATERIAL')
 
-# UI DISPLAY
+        labels = [ISSUE_LABELS.get(i, i) for i in issue_ids]
+        row.label(text=", ".join(labels))
+
+# MAIN PANEL
+
 class Display_ValidateScene(bpy.types.Panel):
     bl_label = "Scene Validation"
     bl_idname = "DISPLAY_PT_validate_scene"
@@ -81,9 +109,11 @@ class Display_ValidateScene(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        # VALIDATION TOOL TITLE
+
+        # scan button
         layout.operator("scene.check_scene")
-        # MESH ISSUE UI WITH LIST
+
+        # MESH ISSUES
         layout.label(text="Mesh Issues", icon='OBJECT_DATA')
         layout.template_list(
             "UI_MeshValidation",
@@ -93,12 +123,37 @@ class Display_ValidateScene(bpy.types.Panel):
             scene,
             "mesh_check_index"
         )
-        # SELECT ALL/DESELECT ALL BUTTONS
+        # Select / Deselect buttons
         row = layout.row(align=True)
         row.operator("scene.select_all_meshes")
         row.operator("scene.deselect_meshes")
+
         layout.separator()
-        # MATERIAL ISSUE UI WITH LIST
+
+        # MESH FIXER
+        layout.label(text="Mesh Fixer", icon='MODIFIER_ON')
+        row = layout.row(align=True)
+        row.operator("scene.fix_all")
+        row.operator("scene.fix_custom")
+
+        box = layout.box()
+        box.label(text="Custom Fix Options")
+        box.prop(scene.fix_options, "fix_scale")
+        box.prop(scene.fix_options, "fix_rotation")
+        box.prop(scene.fix_options, "fix_location")
+        box.prop(scene.fix_options, "fix_naming")
+        if scene.fix_options.fix_naming:
+            box.prop(scene.fix_options, "naming_mode")
+            if scene.fix_options.naming_mode == 'CUSTOM':
+                box.prop(scene.fix_options, "naming_prefix")
+        box.prop(scene.fix_options, "fix_pivot")
+        if scene.fix_options.fix_pivot:
+            box.prop(scene.fix_options, "pivot_mode")
+
+        layout.separator()
+
+        # MATERIAL ISSUES
+
         layout.label(text="Material Issues", icon='MATERIAL')
         layout.template_list(
             "UI_MaterialValidation",
@@ -107,39 +162,44 @@ class Display_ValidateScene(bpy.types.Panel):
             "material_check_items",
             scene,
             "material_check_index"
-        )        
-        # FIXER TOOL TITLE        
-        layout.separator()
-        layout.label(text="Mesh Fixer", icon='MODIFIER_ON')
-        # FIX ALL/FIX CUSTOM BUTTONS
+        )
+        # Select / Deselect buttons (mirrors the mesh section)
         row = layout.row(align=True)
-        row.operator("scene.fix_all")
-        row.operator("scene.fix_custom")
-        # CHECK BOXES FOR CUSTOM FIX
+        row.operator("scene.select_all_materials")
+        row.operator("scene.deselect_materials")
+
+        layout.separator()
+
+        # MATERIAL FIXER
+        layout.label(text="Material Fixer", icon='BRUSH_DATA')
+        row = layout.row(align=True)
+        row.operator("scene.fix_all_materials")
+        row.operator("scene.fix_custom_materials")
+
         box = layout.box()
         box.label(text="Custom Fix Options")
-        box.prop(context.scene.fix_options, "fix_scale")
-        box.prop(context.scene.fix_options, "fix_rotation")
-        box.prop(context.scene.fix_options, "fix_location")
-        box.prop(context.scene.fix_options, "fix_naming")
-        if context.scene.fix_options.fix_naming:
-            box.prop(context.scene.fix_options, "naming_mode") # show naming options
-            if context.scene.fix_options.naming_mode == 'CUSTOM': # if i want custom naming prefix
-                box.prop(context.scene.fix_options, "naming_prefix") # type what i want
-        
-        box.prop(context.scene.fix_options, "fix_pivot")
-        if context.scene.fix_options.fix_pivot:
-            box.prop(context.scene.fix_options, "pivot_mode") # display pivot pt options if fix pivot checked
+        box.prop(scene.fix_mat_options, "fix_no_material")
+        box.prop(scene.fix_mat_options, "fix_mat_naming")
+        if scene.fix_mat_options.fix_mat_naming:
+            box.prop(scene.fix_mat_options, "mat_naming_mode")
+            if scene.fix_mat_options.mat_naming_mode == 'CUSTOM':
+                box.prop(scene.fix_mat_options, "mat_naming_prefix")
+        box.prop(scene.fix_mat_options, "fix_duplicate")
+        box.prop(scene.fix_mat_options, "fix_unused")
+
 
 # LIST OF ALL CLASSES USED IN FILE
 classes = (
     SelectMeshes,
     DeselectMeshes,
     SelectAllMeshes,
+    SelectAllMaterials,
+    DeselectMaterials,
     UI_MeshValidation,
     UI_MaterialValidation,
     Display_ValidateScene,
 )
+
 # REGISTRATION/UNREGISTRATION
 def register():
     for cls in classes:

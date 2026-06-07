@@ -1,10 +1,11 @@
 import bpy
 import re # library for name splitting by it's components (ex. prefix, name, suffix...)
 from . import validation
-from .validation import Fix_Options # import my data container for my "fix custom"
+from .validation import Fix_Options, Fix_Mat_Options # import my data containers
 from mathutils import Vector # for calculating pivot at bottom of mesh
 
-# FIX FUNCTIONS
+# MESH FIX FUNCTIONS
+
 def fix_transforms(obj, context, location=False, rotation=False, scale=False): # function to fix transforms (scale,location,rotation)
     
     if obj.type != 'MESH':
@@ -110,7 +111,97 @@ FIXERS = {
     "PIVOT_INVALID": fix_pivot,
 }
 
-# MAIN FIX FUNCTION 
+# MATERIAL FIX FUNCTIONS
+
+def fix_no_material(mat_item_name, context):
+    """Assign a new default material to a mesh that has none."""
+    obj = context.scene.objects.get(mat_item_name)
+    if obj is None or obj.type != 'MESH':
+        return False
+
+    # build a sensible default material name from the mesh name
+    prefix = validation.get_required_mat_prefix(context)
+    # strip any existing mesh prefix and use the core name
+    base = mat_item_name
+    if "_" in base:
+        base = base.split("_", 1)[1]
+    mat_name = prefix + base if prefix else "M_" + base
+
+    # reuse existing material with that name or create a fresh one
+    mat = bpy.data.materials.get(mat_name) or bpy.data.materials.new(name=mat_name)
+
+    if len(obj.material_slots) == 0:
+        obj.data.materials.append(mat)
+    else:
+        obj.material_slots[0].material = mat
+
+    return True
+
+
+def fix_material_naming(mat_name, context):
+    # rename a material to match the chosen naming convention
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        return False
+
+    prefix = validation.get_required_mat_prefix(context)
+    if prefix == "":
+        return True
+
+    if mat.name.startswith(prefix):
+        return True  # already correct
+
+    # strip any existing prefix up to the first underscore
+    name = mat.name
+    if "_" in name:
+        name = name.split("_", 1)[1]
+
+    # avoid name collisions by letting blender deduplicate
+    mat.name = prefix + name
+    return True
+
+
+def fix_duplicate_material(mat_name, context):
+    # remap all users of a duplicate material to the original and delete the duplicate
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        return False
+
+    base_name = re.sub(r"\.\d+$", "", mat.name)
+    original = bpy.data.materials.get(base_name)
+
+    if original is None or original == mat:
+        return False
+
+    mat.user_remap(original)
+    bpy.data.materials.remove(mat)
+    return True
+
+
+def fix_unused_material(mat_name, context):
+    # remove a material that has no users
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        return False
+
+    if mat.users == 0:
+        bpy.data.materials.remove(mat)
+        return True
+
+    return False
+
+
+# map issue IDs to their material fix functions
+# each function receives (item.name, context)
+MATERIAL_FIXERS = {
+    "NO_MATERIAL_ASSIGNED": fix_no_material,
+    "WRONG_MATERIAL_NAMING": fix_material_naming,
+    "DUPLICATE_MATERIAL": fix_duplicate_material,
+    "UNUSED_MATERIAL": fix_unused_material,
+}
+
+# MAIN FIX FUNCTIONS
+
 def run_fixes(context, selected_only=False, allowed_issues=None):
     # loop though checked meshes
     for item in context.scene.mesh_check_items:
@@ -138,8 +229,29 @@ def run_fixes(context, selected_only=False, allowed_issues=None):
                 remaining_issues.append(issue) # same here
 
         item.issue = ", ".join(remaining_issues) # update issue list
-        
-        
+
+
+def run_material_fixes(context, selected_only=False, allowed_issues=None):
+    # loop through material_check_items and apply the relevant fix functions
+    # we iterate over a snapshot of names because fixing (e.g. removing a duplicate) can modify bpy.data.materials while we are reading it
+    items_snapshot = [(item.name, item.issue, item.selected) for item in context.scene.material_check_items]
+
+    for name, issue_str, selected in items_snapshot:
+        if selected_only and not selected:
+            continue
+
+        issues = [i.strip() for i in issue_str.split(",") if i.strip()]
+
+        for issue in issues:
+            if allowed_issues is not None and issue not in allowed_issues:
+                continue
+
+            fixer = MATERIAL_FIXERS.get(issue)
+            if fixer:
+                fixer(name, context)
+
+# MESH FIX OPERATORS
+
 class Fix_All(bpy.types.Operator):
     bl_idname = "scene.fix_all"
     bl_label = "Fix All"
@@ -190,13 +302,65 @@ class Fix_Custom(bpy.types.Operator):
         bpy.ops.scene.check_scene() # rerun validation afterwards
         return {'FINISHED'}
 
-# CLASSES LISST
+# MATERIAL FIX OPERATORS
+
+class Fix_All_Materials(bpy.types.Operator):
+    bl_idname = "scene.fix_all_materials"
+    bl_label = "Fix All"
+
+    @classmethod
+    def poll(cls, context):
+        return any(item.selected for item in context.scene.material_check_items)
+
+    def execute(self, context):
+        if not any(item.selected for item in context.scene.material_check_items):
+            self.report({'WARNING'}, "No material items selected")
+            return {'CANCELLED'}
+
+        run_material_fixes(context, selected_only=True)
+        bpy.ops.scene.check_scene()
+        return {'FINISHED'}
+
+
+class Fix_Custom_Materials(bpy.types.Operator):
+    bl_idname = "scene.fix_custom_materials"
+    bl_label = "Fix Custom"
+
+    @classmethod
+    def poll(cls, context):
+        return any(item.selected for item in context.scene.material_check_items)
+
+    def execute(self, context):
+        opts = context.scene.fix_mat_options
+
+        allowed = set()
+        if opts.fix_no_material:
+            allowed.add("NO_MATERIAL_ASSIGNED")
+        if opts.fix_mat_naming:
+            allowed.add("WRONG_MATERIAL_NAMING")
+        if opts.fix_duplicate:
+            allowed.add("DUPLICATE_MATERIAL")
+        if opts.fix_unused:
+            allowed.add("UNUSED_MATERIAL")
+
+        if not allowed:
+            self.report({'WARNING'}, "No material fix options selected")
+            return {'CANCELLED'}
+
+        run_material_fixes(context, selected_only=True, allowed_issues=allowed)
+        bpy.ops.scene.check_scene()
+        return {'FINISHED'}
+
+
+# CLASSES LIST
 classes = (
     Fix_All,
     Fix_Custom,
+    Fix_All_Materials,
+    Fix_Custom_Materials,
 )
 
-# REGSITRATION/UNREGISTRATIO
+# REGISTRATION/UNREGISTRATION
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
