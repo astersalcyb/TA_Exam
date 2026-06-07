@@ -11,9 +11,10 @@ import bpy
 from . import validation
 from . import ui
 from . import fixer
+from . import exporter
 
 # SCRIPTS FOR TOOL LIST
-modules = (validation, ui, fixer)
+modules = (validation, ui, fixer, exporter)
 
 # REGISTRATION/UNREGISTRATION
 def register():
