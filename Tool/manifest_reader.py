@@ -14,8 +14,8 @@ import unreal
 import json
 import os
 
-# CONFIGURATION / set this to your manifest.json path before running
-MANIFEST_PATH = "C:/path/to/your/export/manifest.json"
+# CONFIGURATION
+MANIFEST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manifest.json")
 
 # HELPER FUNCTIONS
 
