@@ -84,13 +84,15 @@ def write_manifest(export_path, engine, exported_meshes):
 # we will call FBX exporter python module directly to avoid problems like context
 def export_single_object(obj, file_path, engine):
 
-    # hide everything except our object (temporarilly), we store the original hide state so we can restore it exactly
-    hide_states = {o: o.hide_get() for o in bpy.context.scene.objects}
+    # store original selection + active object
+    original_selected = bpy.context.selected_objects[:]
+    original_active   = bpy.context.view_layer.objects.active
 
-    for o in bpy.context.scene.objects:
-        o.hide_set(o.name != obj.name)   # hide all except current obj
+    # deselect all, then select only our target
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
 
-    # set up export settings
     if engine == 'UE':
         axis_forward = '-Y'
         axis_up      = 'Z'
@@ -98,48 +100,39 @@ def export_single_object(obj, file_path, engine):
         axis_forward = 'Z'
         axis_up      = 'Y'
 
-    # call the FBX exporter module directly, this is what bpy.ops.export_scene.fbx calls internally, but without needing any ui context at all
     try:
-        from io_scene_fbx import export_fbx_bin
-
-        export_fbx_bin.save(
-            operator=None,          # no operator needed
-            context=bpy.context,    # just pass the global context
+        bpy.ops.export_scene.fbx(
             filepath=file_path,
 
-            # what to export
-            use_selection=False,    # we controlled visibility above, so export all visible
-            use_visible=True,       # export only visible objects (our one mesh)
+            use_selection=True,         # export only our selected object
+            use_visible=True,
             use_active_collection=False,
             use_mesh_modifiers=True,
 
-            # axis
             axis_forward=axis_forward,
             axis_up=axis_up,
 
-            # scale
-            apply_unit_scale=True, # convert blender scaling to real world scaling 
+            apply_unit_scale=True,
             apply_scale_options='FBX_SCALE_ALL',
             global_scale=1.0,
 
-            # mesh settings
             mesh_smooth_type='FACE',
             use_tspace=True,
 
-            # animation / bones (we don't need these)
             bake_anim=False,
             add_leaf_bones=False,
 
-            # misc
             path_mode='AUTO',
             embed_textures=False,
         )
-        return True
-
     finally:
-        # always restore visibility, even if export failed
-        for o, state in hide_states.items():
-            o.hide_set(state)
+        # always restore original selection state
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in original_selected:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = original_active
+
+    return True
 
 # EXPORT OPERATOR
 # operator the export button calls, ties all the helper functions together in the right order
